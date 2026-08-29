@@ -11,8 +11,8 @@
   "eh-frame-header": false,
   "emit-debug-gdb-scripts": false,
   "features": "",
-  "linker": "rust-lld",
-  "linker-flavor": "gnu-lld",
+  "linker": "wild",
+  "linker-flavor": "gnu",
   "llvm-abiname": "ilp32",
   "metadata": {
     "description": "Bare Scry ISA",

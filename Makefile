@@ -53,3 +53,21 @@ $(BACKEND): $(BUILD)/cgclif.rev rust-toolchain.toml
 	  || { cat ../../$(BUILD)/backend.log; exit 1; }
 	! grep -q 'was not used in the crate graph' $(BUILD)/backend.log
 	cp $(CGCLIF)/dist/lib/$(BACKEND_DLL) $@
+	
+# Build the sysroot folder for the Scry target
+SYSROOT_LIB := $(DIST)/lib/rustlib/$(TARGET)/lib
+
+# use a file to check that the sysroot folder has been created
+$(DIST)/.sysroot.stamp:
+	mkdir -p $(SYSROOT_LIB)
+	touch $@
+
+.PHONY: sysroot-base
+sysroot-base: $(DIST)/.sysroot.stamp
+
+# Build the core library
+CORE_RLIB := $(DIST)/lib/rustlib/$(TARGET)/lib/libcore.rlib
+$(CORE_RLIB): $(wildcard sysroot/core/src/*.rs) $(BACKEND) | sysroot-base
+	rustc +$(PIN) -Zunstable-options -Zcodegen-backend=$(abspath $(BACKEND)) \
+	  --target $(TARGET) --edition 2024 --crate-name core --crate-type rlib \
+	  -Ccodegen-units=1 -o $@ sysroot/core/src/lib.rs
