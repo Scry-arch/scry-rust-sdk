@@ -3,7 +3,7 @@ SHELL := /bin/sh
 
 # The SDK owns all compiler flags.
 ifdef RUSTFLAGS
-  $(error RUSTFLAGS is set in the environment; unset it)
+	$(error RUSTFLAGS is set in the environment; unset it)
 endif
 
 # Single source of truth for the nightly pin.
@@ -14,6 +14,7 @@ export RUST_TARGET_PATH := $(CURDIR)/targets
 ifeq ($(OS),Windows_NT)
   EXE := .exe
 endif
+BUILD := build
 
 # We use cg_clif to pin which rust nightly version must be used.
 rust-toolchain.toml: submodules/rustc_codegen_cranelift/rust-toolchain.toml
@@ -23,4 +24,32 @@ rust-toolchain.toml: submodules/rustc_codegen_cranelift/rust-toolchain.toml
 .PHONY: toolchain
 toolchain: rust-toolchain.toml
 	rustup toolchain install $(PIN)
+
 	
+CGCLIF := submodules/rustc_codegen_cranelift
+
+# Check if cg_clif has changed and put the commit hash in a file
+$(BUILD)/cgclif.rev: FORCE
+	@mkdir -p $(BUILD)
+	@rev=$$(git -C $(CGCLIF) rev-parse HEAD); \
+	 [ "$$rev" = "$$(cat $@ 2>/dev/null || true)" ] || echo "$$rev" > $@
+.PHONY: FORCE
+FORCE:
+	
+	
+# Path to the cranelift build library that rustc uses for compiling to Scry
+ifeq ($(OS),Windows_NT)
+  BACKEND_DLL := rustc_codegen_cranelift.dll
+else ifeq ($(shell uname -s),Darwin)
+  BACKEND_DLL := librustc_codegen_cranelift.dylib
+else
+  BACKEND_DLL := librustc_codegen_cranelift.so
+endif
+BACKEND := $(DIST)/lib/$(BACKEND_DLL)
+
+$(BACKEND): $(BUILD)/cgclif.rev rust-toolchain.toml
+	mkdir -p $(DIST)/lib
+	cd $(CGCLIF) && ./y.sh build > ../../$(BUILD)/backend.log 2>&1 \
+	  || { cat ../../$(BUILD)/backend.log; exit 1; }
+	! grep -q 'was not used in the crate graph' $(BUILD)/backend.log
+	cp $(CGCLIF)/dist/lib/$(BACKEND_DLL) $@
