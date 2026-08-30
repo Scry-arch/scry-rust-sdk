@@ -1,0 +1,27 @@
+name: Set up build prerequisites
+description: >-
+  GNU make >= 4 plus a POSIX sh: MSYS2 on Windows
+  (with the runner's native rustup/cargo/git inherited on PATH), Homebrew GNU
+  make on macOS. No-op on Linux, so callers can use it unconditionally.
+
+runs:
+  using: composite
+  steps:
+    # Requires GNU make + POSIX sh; on Windows that means MSYS2.
+    # path-type: inherit keeps the native rustup/cargo/git on PATH. This also
+    # registers the `msys2 {0}` shell used by the calling workflow's steps.
+    - name: Set up MSYS2
+      if: runner.os == 'Windows'
+      uses: msys2/setup-msys2@v2
+      with:
+        msystem: UCRT64
+        path-type: inherit
+        install: make
+
+    # macOS ships GNU make 3.81; requires >= 4.
+    - name: Install GNU Make >= 4
+      if: runner.os == 'macOS'
+      shell: bash
+      run: |
+        brew install make
+        echo "$(brew --prefix)/opt/make/libexec/gnubin" >> "$GITHUB_PATH"

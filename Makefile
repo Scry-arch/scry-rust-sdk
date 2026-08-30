@@ -71,3 +71,6 @@ $(CORE_RLIB): $(wildcard sysroot/core/src/*.rs) $(BACKEND) | sysroot-base
 	rustc +$(PIN) -Zunstable-options -Zcodegen-backend=$(abspath $(BACKEND)) \
 	  --target $(TARGET) --edition 2024 --crate-name core --crate-type rlib \
 	  -Ccodegen-units=1 -o $@ sysroot/core/src/lib.rs
+
+.PHONY: build-all
+build-all: $(BACKEND) 

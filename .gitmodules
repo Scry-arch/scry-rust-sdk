@@ -3,4 +3,4 @@
 	url = https://github.com/Scry-arch/scry-wild
 [submodule "submodules/rustc_codegen_cranelift"]
 	path = submodules/rustc_codegen_cranelift
-	url = git@github.com:Scry-arch/rustc_codegen_cranelift.git
+	url = https://github.com/Scry-arch/rustc_codegen_cranelift.git

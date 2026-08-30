@@ -1,0 +1,67 @@
+name: build
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            shell: bash
+          - os: macos-latest
+            shell: bash
+          - os: windows-latest
+            shell: msys2 {0}
+    defaults:
+      run:
+        shell: ${{ matrix.shell }}
+    steps:
+      # The Makefile and y.sh must survive a Windows checkout with LF intact.
+      - name: Force LF line endings
+        run: git config --global core.autocrlf false
+        shell: bash
+
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # GNU make + POSIX sh where the runner lacks them (MSYS2 on Windows,
+      # brew make on macOS; no-op on Linux).
+      - name: Set up build prerequisites
+        uses: ./.github/actions/setup-prereqs
+
+      - name: Fetch submodules
+        shell: bash
+        run: git submodule update --init --recursive
+
+      # Cold cg_clif builds dominate CI time; key on the pin + cranelift lock.
+      - name: Cache cargo and backend build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            submodules/rustc_codegen_cranelift/build
+          key: scry-sdk-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'submodules/rustc_codegen_cranelift/Cargo.lock') }}
+
+      - name: Install pinned toolchain
+        run: make toolchain
+
+      - name: Build
+        run: make build-all
