@@ -7,7 +7,7 @@ ifdef RUSTFLAGS
 endif
 
 # Single source of truth for the nightly pin.
-PIN  := $(shell sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)
+PIN = $(or $(shell sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml 2>/dev/null),$(error rust-toolchain.toml missing or unreadable.))
 DIST := dist
 TARGET := scry32-unknown-none-elf
 export RUST_TARGET_PATH := $(CURDIR)/targets
@@ -15,18 +15,45 @@ ifeq ($(OS),Windows_NT)
   EXE := .exe
 endif
 BUILD := build
+CGCLIF := submodules/rustc_codegen_cranelift
+
+# --- Submodules --------------------------------------------------------------
+
+# Update the submodules and identify freshness through cg_clif's rust-toolchain.toml.
+$(CGCLIF)/rust-toolchain.toml:
+	git submodule update --init --recursive
+
+# Bump every submodule to its remote's current default branch. Uses
+# reset --hard because the forks rebase/force-push; refuses if a submodule
+# has local changes unless FORCE_SUBMODULES=1 is set (hack in the standalone
+# clones, not under submodules/).
+.PHONY: update-submodules
+update-submodules:
+	git submodule sync --quiet
+	git submodule update --init --recursive
+	@git config --file .gitmodules --get-regexp '\.path$$' | cut -d' ' -f2 | \
+	while read -r sub; do \
+	  if [ -z "$(FORCE_SUBMODULES)" ] && [ -n "$$(git -C "$$sub" status --porcelain)" ]; then \
+	    echo "error: $$sub has local changes; commit or discard them, or rerun with FORCE_SUBMODULES=1" >&2; \
+	    exit 1; \
+	  fi; \
+	  echo "== $$sub"; \
+	  git -C "$$sub" fetch origin || exit 1; \
+	  branch=$$(git -C "$$sub" symbolic-ref -q --short refs/remotes/origin/HEAD | sed 's|^origin/||'); \
+	  [ -n "$$branch" ] || branch=main; \
+	  git -C "$$sub" reset --hard "origin/$$branch" || exit 1; \
+	done
+
+# -----------------------------------------------------------------------------
 
 # We use cg_clif to pin which rust nightly version must be used.
-rust-toolchain.toml: submodules/rustc_codegen_cranelift/rust-toolchain.toml
+rust-toolchain.toml: $(CGCLIF)/rust-toolchain.toml
 	cp $< $@
 
 # Install the rust nightly version that must be used
 .PHONY: toolchain
 toolchain: rust-toolchain.toml
 	rustup toolchain install $(PIN)
-
-	
-CGCLIF := submodules/rustc_codegen_cranelift
 
 # Check if cg_clif has changed and put the commit hash in a file
 $(BUILD)/cgclif.rev: FORCE
@@ -35,8 +62,7 @@ $(BUILD)/cgclif.rev: FORCE
 	 [ "$$rev" = "$$(cat $@ 2>/dev/null || true)" ] || echo "$$rev" > $@
 .PHONY: FORCE
 FORCE:
-	
-	
+
 # Path to the cranelift build library that rustc uses for compiling to Scry
 ifeq ($(OS),Windows_NT)
   BACKEND_DLL := rustc_codegen_cranelift.dll
@@ -73,4 +99,4 @@ $(CORE_RLIB): $(wildcard sysroot/core/src/*.rs) $(BACKEND) | sysroot-base
 	  -Ccodegen-units=1 -o $@ sysroot/core/src/lib.rs
 
 .PHONY: build-all
-build-all: $(BACKEND) 
+build-all: $(BACKEND) $(CORE_RLIB)
