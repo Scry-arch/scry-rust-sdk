@@ -66,3 +66,7 @@ pub auto trait Unpin {}
 
 #[lang = "phantom_data"]
 pub struct PhantomData<T: PointeeSized>;
+
+// Arrays of Copy elements are Copy (real core provides this blanket impl;
+// without it `*dst = *src` on a borrowed array is a move-out error, E0508).
+impl<T: Copy, const N: usize> Copy for [T; N] {}

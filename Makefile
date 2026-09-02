@@ -98,5 +98,18 @@ $(CORE_RLIB): $(wildcard sysroot/core/src/*.rs) $(BACKEND) | sysroot-base
 	  --target $(TARGET) --edition 2024 --crate-name core --crate-type rlib \
 	  -Ccodegen-units=1 -o $@ sysroot/core/src/lib.rs
 
+# Build the compiler_builtins library. rustc injects `extern crate
+# compiler_builtins` into every #![no_std] crate, and cg_clif calls its mem*
+# functions for aggregate copies above its inlining threshold. Needs
+# --sysroot: the crate is #![no_std] against scry-core. Overflow checks off:
+# these are the innermost loops of every copy and their indices cannot
+# overflow (i < n <= usize::MAX).
+BUILTINS_RLIB := $(DIST)/lib/rustlib/$(TARGET)/lib/libcompiler_builtins.rlib
+$(BUILTINS_RLIB): $(wildcard sysroot/compiler_builtins/src/*.rs) $(CORE_RLIB)
+	rustc +$(PIN) -Zunstable-options -Zcodegen-backend=$(abspath $(BACKEND)) \
+	  --target $(TARGET) --sysroot $(DIST) --edition 2024 \
+	  --crate-name compiler_builtins --crate-type rlib \
+	  -Ccodegen-units=1 -Coverflow-checks=no -o $@ sysroot/compiler_builtins/src/lib.rs
+
 .PHONY: build-all
-build-all: $(BACKEND) $(CORE_RLIB)
+build-all: $(BACKEND) $(CORE_RLIB) $(BUILTINS_RLIB)

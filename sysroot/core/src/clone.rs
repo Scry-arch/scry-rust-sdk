@@ -54,3 +54,11 @@ impl<T: PointeeSized> Clone for *mut T {
         *self
     }
 }
+
+// Arrays of Copy elements clone bitwise. (Real core clones element-wise for
+// any T: Clone; the Copy-bounded form covers everything scry-core supports.)
+impl<T: crate::marker::Copy, const N: usize> Clone for [T; N] {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
