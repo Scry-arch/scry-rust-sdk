@@ -1,0 +1,8 @@
+[package]
+name = "cargo-scry"
+version = "0.1.0"
+edition = "2024"
+description = "Runs cargo for the Scry target using the SDK this binary is installed in"
+publish = false
+
+[dependencies]

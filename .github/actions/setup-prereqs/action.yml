@@ -25,3 +25,10 @@ runs:
       run: |
         brew install make
         echo "$(brew --prefix)/opt/make/libexec/gnubin" >> "$GITHUB_PATH"
+
+    # The run tests build with `cargo scry` and execute the result on scryer.
+    # Built with the runner's stable toolchain: this runs before `make
+    # toolchain`, so the SDK's pinned nightly isn't installed yet.
+    - name: Install scryer
+      shell: bash
+      run: cargo +stable install --locked --git https://github.com/Scry-arch/scryer.git scryer

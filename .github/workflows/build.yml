@@ -37,7 +37,7 @@ jobs:
         run: git config --global core.autocrlf false
         shell: bash
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
 
@@ -52,7 +52,7 @@ jobs:
 
       # Cold cg_clif builds dominate CI time; key on the pin + cranelift lock.
       - name: Cache cargo and backend build
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
@@ -65,3 +65,16 @@ jobs:
 
       - name: Build
         run: make build-all
+
+      # Puts cargo-scry (and wild) on PATH for every later step, so plain
+      # `cargo scry` works the way it does for a user.
+      - name: Add SDK tools to PATH
+        shell: bash
+        run: |
+          case "$RUNNER_OS" in
+            Windows) echo "$(pwd -W)/dist/bin" >> "$GITHUB_PATH" ;;
+            *) echo "$PWD/dist/bin" >> "$GITHUB_PATH" ;;
+          esac
+
+      - name: Check
+        run: make check-run

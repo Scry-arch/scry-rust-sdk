@@ -23,6 +23,8 @@
   "panic-strategy": "abort",
   "pre-link-args": {
     "gnu": [
+      "-flavor",
+      "gnu",
       "-m",
       "elf32scry",
       "-z",

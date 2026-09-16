@@ -146,5 +146,60 @@ $(BUILTINS_RLIB): $(wildcard sysroot/compiler_builtins/src/*.rs) $(CORE_RLIB) ta
 	  --crate-name compiler_builtins --crate-type rlib \
 	  -Ccodegen-units=1 -Coverflow-checks=no -o $@ sysroot/compiler_builtins/src/lib.rs
 
+
+# --- Target spec residency ----------------------------------------------------
+
+# rustc looks for custom target specs in <sysroot>/lib/rustlib/<target>/target.json,
+# so anything building against $(DIST) needs neither RUST_TARGET_PATH nor a path
+# to the JSON. The Makefile's own rustc invocations still use RUST_TARGET_PATH,
+# since they build the sysroot itself.
+TARGET_SPEC := $(DIST)/lib/rustlib/$(TARGET)/target.json
+$(TARGET_SPEC): targets/$(TARGET).json | sysroot-base
+	cp $< $@
+
+# --- cargo-scry wrapper --------------------------------------------------------
+
+# `cargo scry <subcommand>` runs cargo for the Scry target with everything in
+# $(DIST) injected, so projects need no configuration. The toolchain pin is
+# baked in at build time.
+CARGO_SCRY := $(DIST)/bin/cargo-scry$(EXE)
+$(CARGO_SCRY): $(wildcard wrapper/cargo-scry/src/*.rs) wrapper/cargo-scry/Cargo.toml rust-toolchain.toml
+	mkdir -p $(DIST)/bin
+	SCRY_TOOLCHAIN=$(PIN) cargo +$(PIN) build --release \
+	  --manifest-path wrapper/cargo-scry/Cargo.toml \
+	  --target-dir $(BUILD)/cargo-scry > $(BUILD)/cargo-scry.log 2>&1 \
+	  || { cat $(BUILD)/cargo-scry.log; exit 1; }
+	cp $(BUILD)/cargo-scry/release/cargo-scry$(EXE) $@
+
+.PHONY: cargo-scry
+cargo-scry: $(CARGO_SCRY)
+
+# --- Run tests -----------------------------------------------------------------
+
+# Every directory under test/ holding an expected.txt is a run test: a plain
+# cargo project that `make check-run` builds with `cargo scry`, runs on scryer,
+# and whose returned operands (the line after "Returned Operands") must match
+# expected.txt exactly. Add a test by adding such a directory; run one with
+# `make check-run-<name>`. Output of each run is kept in $(BUILD)/test/.
+# Needs $(DIST)/bin on PATH (for cargo-scry) and scryer installed, exactly as
+# a user of the SDK would have them.
+RUN_TESTS := $(patsubst test/%/expected.txt,%,$(wildcard test/*/expected.txt))
+
+.PHONY: check-run
+check-run: $(RUN_TESTS:%=check-run-%)
+
+check-run-%: test/%/expected.txt build-all
+	@mkdir -p $(BUILD)/test
+	@cd test/$* && cargo scry run --quiet > "$(abspath $(BUILD))/test/$*.out" 2>&1 \
+	  || { echo "check-run-$*: FAILED to build or run:"; cat "$(abspath $(BUILD))/test/$*.out"; exit 1; }
+	@sed -n '/Returned Operands/{n;s/[[:space:]]*$$//;p;}' $(BUILD)/test/$*.out > $(BUILD)/test/$*.actual
+	@sed 's/[[:space:]]*$$//' test/$*/expected.txt > $(BUILD)/test/$*.expected
+	@git diff --no-index --quiet $(BUILD)/test/$*.expected $(BUILD)/test/$*.actual \
+	  || { echo "check-run-$*: FAILED, expected:"; cat $(BUILD)/test/$*.expected; echo "actual:"; cat $(BUILD)/test/$*.actual; exit 1; }
+	@echo "check-run-$*: OK"
+
+.PHONY: check
+check: check-run
+
 .PHONY: build-all
-build-all: $(BACKEND) $(WILD) $(CORE_RLIB) $(BUILTINS_RLIB)
+build-all: $(BACKEND) $(WILD) $(TARGET_SPEC) $(CORE_RLIB) $(BUILTINS_RLIB) $(CARGO_SCRY)
