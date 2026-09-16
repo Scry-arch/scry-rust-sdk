@@ -21,6 +21,14 @@
     "tier": 3
   },
   "panic-strategy": "abort",
+  "pre-link-args": {
+    "gnu": [
+      "-m",
+      "elf32scry",
+      "-z",
+      "norelro"
+    ]
+  },
   "relocation-model": "static",
   "target-pointer-width": 32
 }

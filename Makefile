@@ -80,6 +80,41 @@ $(BACKEND): $(BUILD)/cgclif.rev rust-toolchain.toml
 	! grep -q 'was not used in the crate graph' $(BUILD)/backend.log
 	cp $(CGCLIF)/dist/lib/$(BACKEND_DLL) $@
 	
+
+# --- wild linker -------------------------------------------------------------
+
+# The Scry fork of the wild linker ships as a host binary in $(DIST)/bin.
+WILD_SRC := submodules/scry-wild
+WILD := $(DIST)/bin/wild$(EXE)
+
+# wild's default `fork` feature is Unix-only; its own CI builds Windows and
+# macOS with --no-default-features, so do the same here.
+ifeq ($(shell uname -s),Linux)
+  WILD_FEATURES :=
+else
+  WILD_FEATURES := --no-default-features
+endif
+
+# Submodule-rev stamp, same trick as cgclif.rev: only touched when HEAD moves.
+$(BUILD)/wild.rev: FORCE
+	@mkdir -p $(BUILD)
+	@rev=$$(git -C $(WILD_SRC) rev-parse HEAD); \
+	 [ "$$rev" = "$$(cat $@ 2>/dev/null || true)" ] || echo "$$rev" > $@
+
+# Built with the pinned nightly so no separate stable toolchain is needed.
+# --locked honours the fork's Cargo.lock (which pins the Scry object fork).
+# The target dir lives under $(BUILD) so the submodule checkout stays clean.
+$(WILD): $(BUILD)/wild.rev rust-toolchain.toml
+	mkdir -p $(DIST)/bin
+	cargo +$(PIN) build --locked --release $(WILD_FEATURES) \
+	  --manifest-path $(WILD_SRC)/Cargo.toml --package wild-linker --bin wild \
+	  --target-dir $(BUILD)/wild > $(BUILD)/wild.log 2>&1 \
+	  || { cat $(BUILD)/wild.log; exit 1; }
+	cp $(BUILD)/wild/release/wild$(EXE) $@
+
+.PHONY: wild
+wild: $(WILD)
+
 # Build the sysroot folder for the Scry target
 SYSROOT_LIB := $(DIST)/lib/rustlib/$(TARGET)/lib
 
@@ -93,7 +128,7 @@ sysroot-base: $(DIST)/.sysroot.stamp
 
 # Build the core library
 CORE_RLIB := $(DIST)/lib/rustlib/$(TARGET)/lib/libcore.rlib
-$(CORE_RLIB): $(wildcard sysroot/core/src/*.rs) $(BACKEND) | sysroot-base
+$(CORE_RLIB): $(wildcard sysroot/core/src/*.rs) $(BACKEND) targets/$(TARGET).json | sysroot-base
 	rustc +$(PIN) -Zunstable-options -Zcodegen-backend=$(abspath $(BACKEND)) \
 	  --target $(TARGET) --edition 2024 --crate-name core --crate-type rlib \
 	  -Ccodegen-units=1 -o $@ sysroot/core/src/lib.rs
@@ -105,11 +140,11 @@ $(CORE_RLIB): $(wildcard sysroot/core/src/*.rs) $(BACKEND) | sysroot-base
 # these are the innermost loops of every copy and their indices cannot
 # overflow (i < n <= usize::MAX).
 BUILTINS_RLIB := $(DIST)/lib/rustlib/$(TARGET)/lib/libcompiler_builtins.rlib
-$(BUILTINS_RLIB): $(wildcard sysroot/compiler_builtins/src/*.rs) $(CORE_RLIB)
+$(BUILTINS_RLIB): $(wildcard sysroot/compiler_builtins/src/*.rs) $(CORE_RLIB) targets/$(TARGET).json
 	rustc +$(PIN) -Zunstable-options -Zcodegen-backend=$(abspath $(BACKEND)) \
 	  --target $(TARGET) --sysroot $(DIST) --edition 2024 \
 	  --crate-name compiler_builtins --crate-type rlib \
 	  -Ccodegen-units=1 -Coverflow-checks=no -o $@ sysroot/compiler_builtins/src/lib.rs
 
 .PHONY: build-all
-build-all: $(BACKEND) $(CORE_RLIB) $(BUILTINS_RLIB)
+build-all: $(BACKEND) $(WILD) $(CORE_RLIB) $(BUILTINS_RLIB)
