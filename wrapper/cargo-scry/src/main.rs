@@ -83,11 +83,19 @@ fn main() {
         cmd.arg("--target").arg(TARGET);
     }
 
+    // Cargo decides whether to rebuild from the text of the flags, not from the files they name,
+    // so without this a project keeps its old binaries after the SDK's backend or sysroot is
+    // rebuilt. Mixing a stamp of those files into the crate metadata changes the flags whenever
+    // they change.
+    let builtins = core.with_file_name("libcompiler_builtins.rlib");
+    let stamp = sdk_stamp(&[&backend, &core, &builtins]);
+
     let rustflags = [
         "-Zunstable-options".to_owned(),
         format!("-Zcodegen-backend={}", toml_path(&backend)),
         "--sysroot".to_owned(),
         toml_path(&dist),
+        format!("-Cmetadata=scry-sdk-{stamp:x}"),
     ];
     config(
         &mut cmd,
@@ -132,6 +140,32 @@ fn sdk_dist_dir() -> PathBuf {
         .and_then(Path::parent)
         .map(Path::to_path_buf)
         .unwrap_or_else(|| fail("cargo-scry must be installed in the SDK's dist/bin directory"))
+}
+
+/// A value that changes whenever any of the supplied files is rebuilt: a hash of their sizes and
+/// modification times.
+fn sdk_stamp(files: &[&PathBuf]) -> u64 {
+    // FNV-1a. Must be stable across runs, which `std`'s default hasher isn't guaranteed to be.
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    let mut mix = |value: u64| {
+        for byte in value.to_le_bytes() {
+            hash ^= u64::from(byte);
+            hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+        }
+    };
+    for file in files {
+        let Ok(metadata) = std::fs::metadata(file) else {
+            continue;
+        };
+        mix(metadata.len());
+        let modified = metadata
+            .modified()
+            .ok()
+            .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+            .map_or(0, |since_epoch| since_epoch.as_nanos() as u64);
+        mix(modified);
+    }
+    hash
 }
 
 /// Finds scryer: shipped in the SDK, on PATH, or installed with `cargo install`.

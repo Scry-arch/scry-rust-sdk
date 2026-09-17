@@ -4,6 +4,16 @@
 
 use crate::marker::{MetaSized, PointeeSized, Sized, Tuple, Unsize};
 
+// ---- ranges ----
+
+/// A half-open range, `start..end`. The compiler builds one for every `a..b`
+/// expression; `crate::iter` makes it iterable for the integer types.
+#[lang = "Range"]
+pub struct Range<Idx> {
+    pub start: Idx,
+    pub end: Idx,
+}
+
 #[lang = "add"]
 pub trait Add<Rhs = Self> {
     type Output;

@@ -5,9 +5,14 @@ use crate::cmp::PartialEq;
 use crate::marker::Copy;
 use crate::panicking;
 
+// The lang items let the compiler name `Some`/`None` itself, e.g. when it
+// desugars `for` loops into `match iter.next()`.
+#[lang = "Option"]
 pub enum Option<T> {
-    Some(T),
+    #[lang = "None"]
     None,
+    #[lang = "Some"]
+    Some(T),
 }
 
 pub use self::Option::{None, Some};

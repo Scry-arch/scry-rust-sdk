@@ -4,8 +4,10 @@
 //! - Operator impls exist ONLY for <=32-bit types; `u64 + u64` etc. fail typeck (E0369).
 //! - Panics trap immediately; no `#[panic_handler]`, no unwinding, no formatting.
 //!   `panic!` accepts only a string literal.
-//! - Not yet provided: floats, Iterator/for-loops, ranges, Ordering/Eq/Ord,
-//!   derive(PartialOrd), str comparison, UnsafeCell, fmt.
+//! - `for` loops work over `a..b` ranges of the integer types only; `Iterator`
+//!   has no adapters and there is no `Step`, `RangeInclusive` or `RangeFrom`.
+//! - Not yet provided: floats, Ordering/Eq/Ord, derive(PartialOrd),
+//!   str comparison, UnsafeCell, fmt.
 #![feature(
     no_core,
     lang_items,
@@ -27,6 +29,7 @@ pub mod clone;
 pub mod cmp;
 pub mod ffi;
 pub mod intrinsics;
+pub mod iter;
 pub mod marker;
 pub mod mem;
 pub mod ops;

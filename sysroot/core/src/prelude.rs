@@ -5,6 +5,7 @@
 pub mod v1 {
     pub use crate::clone::Clone;
     pub use crate::cmp::{PartialEq, PartialOrd};
+    pub use crate::iter::{IntoIterator, Iterator};
     pub use crate::marker::{Copy, Send, Sized, Sync, Unpin};
     pub use crate::mem::drop;
     pub use crate::ops::{Drop, Fn, FnMut, FnOnce};
