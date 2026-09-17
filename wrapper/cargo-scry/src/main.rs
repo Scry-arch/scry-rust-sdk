@@ -12,11 +12,9 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::process::exit;
 
-/// The rustc target. Its spec lives in the sysroot, so rustc finds it by name.
+/// The target triple. rustc finds its spec by this name in the sysroot, and scryer uses the same
+/// name for its `--target` option.
 const TARGET: &str = "scry32-unknown-none-elf";
-
-/// The name scryer uses for the same target.
-const SCRYER_TARGET: &str = "scry-unknown-none-elf32";
 
 /// The nightly the SDK was built with. Baked in by the Makefile.
 const TOOLCHAIN: &str = env!(
@@ -110,7 +108,7 @@ fn main() {
             let runner = [
                 toml_path(&scryer),
                 "--target".to_owned(),
-                SCRYER_TARGET.to_owned(),
+                TARGET.to_owned(),
             ];
             config(
                 &mut cmd,
