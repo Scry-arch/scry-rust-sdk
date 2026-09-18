@@ -5,4 +5,20 @@ edition = "2024"
 description = "Runs cargo for the Scry target using the SDK this binary is installed in"
 publish = false
 
+# Two binaries share the library: `cargo-scry`, the cargo subcommand, and
+# `scry-load`, the cargo runner that puts an ELF onto a board.
+[[bin]]
+name = "cargo-scry"
+path = "src/main.rs"
+
+[[bin]]
+name = "scry-load"
+path = "src/bin/scry-load.rs"
+
 [dependencies]
+object = { version = "0.40", default-features = false, features = ["read_core", "elf", "std"] }
+serde = { version = "1", features = ["derive"] }
+# Without default features there is no libudev dependency on Linux. Port
+# autodetection then only works on Windows and macOS; elsewhere pass --port.
+serialport = { version = "4", default-features = false }
+toml = "1"

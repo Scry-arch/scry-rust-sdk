@@ -161,18 +161,31 @@ $(TARGET_SPEC): targets/$(TARGET).json | sysroot-base
 
 # `cargo scry <subcommand>` runs cargo for the Scry target with everything in
 # $(DIST) injected, so projects need no configuration. The toolchain pin is
-# baked in at build time.
+# baked in at build time. The same crate builds `scry-load`, the cargo runner
+# that downloads a program to a board; one rule installs both.
 CARGO_SCRY := $(DIST)/bin/cargo-scry$(EXE)
-$(CARGO_SCRY): $(wildcard wrapper/cargo-scry/src/*.rs) wrapper/cargo-scry/Cargo.toml rust-toolchain.toml
+WRAPPER_SRC := $(wildcard wrapper/cargo-scry/src/*.rs wrapper/cargo-scry/src/bin/*.rs) \
+  wrapper/cargo-scry/Cargo.toml
+$(CARGO_SCRY): $(WRAPPER_SRC) rust-toolchain.toml
 	mkdir -p $(DIST)/bin
 	SCRY_TOOLCHAIN=$(PIN) cargo +$(PIN) build --release \
 	  --manifest-path wrapper/cargo-scry/Cargo.toml \
 	  --target-dir $(BUILD)/cargo-scry > $(BUILD)/cargo-scry.log 2>&1 \
 	  || { cat $(BUILD)/cargo-scry.log; exit 1; }
+	cp $(BUILD)/cargo-scry/release/scry-load$(EXE) $(DIST)/bin/scry-load$(EXE)
 	cp $(BUILD)/cargo-scry/release/cargo-scry$(EXE) $@
 
 .PHONY: cargo-scry
 cargo-scry: $(CARGO_SCRY)
+
+# --- Board profiles -------------------------------------------------------------
+
+# `cargo scry --board <name>` looks profiles up in $(DIST)/boards, next to the
+# wrapper that reads them.
+BOARDS := $(patsubst boards/%.toml,$(DIST)/boards/%.toml,$(wildcard boards/*.toml))
+$(DIST)/boards/%.toml: boards/%.toml
+	mkdir -p $(DIST)/boards
+	cp $< $@
 
 # --- Run tests -----------------------------------------------------------------
 
@@ -198,8 +211,38 @@ check-run-%: test/%/expected.txt build-all
 	  || { echo "check-run-$*: FAILED, expected:"; cat $(BUILD)/test/$*.expected; echo "actual:"; cat $(BUILD)/test/$*.actual; exit 1; }
 	@echo "check-run-$*: OK"
 
+# --- Board image tests ----------------------------------------------------------
+
+# Links every run test for every board and lets scry-load build its image
+# without sending it. That checks the program against the board's memory and
+# verifies the image byte for byte against the ELF's loadable segments. Images
+# are kept in $(BUILD)/test/. Needs $(DIST)/bin on PATH; no board or simulator.
+BOARD_NAMES := $(patsubst boards/%.toml,%,$(wildcard boards/*.toml))
+IMAGE_TESTS := $(foreach board,$(BOARD_NAMES),$(RUN_TESTS:%=check-image-$(board)+%))
+
+.PHONY: check-image
+check-image: $(IMAGE_TESTS)
+
+# The stem is <board>+<test>.
+check-image-%: build-all
+	@mkdir -p $(BUILD)/test
+	@board=$$(echo '$*' | cut -d+ -f1); test=$$(echo '$*' | cut -d+ -f2-); \
+	 out="$(abspath $(BUILD))/test/$$test.$$board"; \
+	 ( cd test/$$test && cargo scry run --quiet --board $$board -- --image "$$out.bin" ) > "$$out.log" 2>&1 \
+	   || { echo "check-image-$*: FAILED:"; cat "$$out.log"; exit 1; }; \
+	 echo "check-image-$*: OK ($$(grep -o 'load address.*' "$$out.log"))"
+
+# The wrapper crate's own unit tests: board profiles, image flattening, and the
+# loader's serial protocol.
+.PHONY: check-wrapper
+check-wrapper: rust-toolchain.toml
+	@mkdir -p $(BUILD)
+	SCRY_TOOLCHAIN=$(PIN) cargo +$(PIN) test --quiet \
+	  --manifest-path wrapper/cargo-scry/Cargo.toml \
+	  --target-dir $(BUILD)/cargo-scry
+
 .PHONY: check
-check: check-run
+check: check-wrapper check-run check-image
 
 .PHONY: build-all
-build-all: $(BACKEND) $(WILD) $(TARGET_SPEC) $(CORE_RLIB) $(BUILTINS_RLIB) $(CARGO_SCRY)
+build-all: $(BACKEND) $(WILD) $(TARGET_SPEC) $(CORE_RLIB) $(BUILTINS_RLIB) $(CARGO_SCRY) $(BOARDS)

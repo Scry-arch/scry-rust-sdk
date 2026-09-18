@@ -76,5 +76,6 @@ jobs:
             *) echo "$PWD/dist/bin" >> "$GITHUB_PATH" ;;
           esac
 
+      # Wrapper unit tests, the run tests on scryer, and the board image tests.
       - name: Check
-        run: make check-run
+        run: make check
