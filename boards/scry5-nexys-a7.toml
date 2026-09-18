@@ -1,0 +1,21 @@
+# Scry-5: the FPGA implementation of the Scry CPU on a Digilent Nexys A7.
+#
+# A board profile states facts about the hardware. `cargo scry --board scry5-nexys-a7` links programs with
+# `link.args`, and `cargo scry run --board scry5-nexys-a7` checks the result against `memory` and downloads
+# it over the serial port with `scry-load`.
+
+name = "Scry-5 (Nexys A7)"
+
+[link]
+# Place the program at the start of main memory and don't pad segments out to pages: the board
+# has no MMU, and every byte of padding is a byte sent over the serial port.
+args = ["--image-base=0x0", "-n"]
+
+[memory]
+# Where code and data, including zero-initialised data, may live. The heap (0x0001_0000), the stack
+# window (0x0001_4000) and the machine's spill records (0x0002_0000 upward) follow it and must not
+# be overwritten by a program's image.
+program = { start = 0x0000_0000, end = 0x0001_0000 }
+
+[loader]
+baud = 115200

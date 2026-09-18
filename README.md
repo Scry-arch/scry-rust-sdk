@@ -140,9 +140,50 @@ The SDK's `core` library is deliberately small. Integer arithmetic is available 
 bits, `for` loops work over `a..b` ranges, and `panic!` accepts a string literal only. There is no
 `std`, no heap, no floating point and no formatting yet.
 
+## Running on hardware
+
+By default programs are linked for, and run on, the scryer simulator. To target real hardware, name
+a board. A board profile tells the SDK how programs for that hardware must be linked, which memory
+they may occupy, and how to reach its loader. The SDK ships the profile `scry5-nexys-a7`, the FPGA
+implementation of the CPU on a Nexys A7.
+
+```sh
+cargo scry build --board scry5-nexys-a7     # link for the board
+cargo scry run --board scry5-nexys-a7       # link, check, download over the serial port, and run
+```
+
+`cargo scry run --board scry5-nexys-a7` checks that the program fits the board's memory, sends it
+to the board's boot loader, shows the program's output, and prints the returned operands in the
+same form as scryer when it ends. The serial port is detected automatically; options for the
+download go after `--`:
+
+```sh
+cargo scry run --board scry5-nexys-a7 -- --port COM5            # choose the serial port
+cargo scry run --board scry5-nexys-a7 -- --check                # only check that the program fits
+cargo scry run --board scry5-nexys-a7 -- --image program.bin    # write the flat image instead of sending it
+```
+
+Instead of passing `--board` every time, a project can record its board in `Cargo.toml`, or you can
+set the `SCRY_BOARD` environment variable:
+
+```toml
+[package.metadata.scry]
+board = "scry5-nexys-a7"
+```
+
+The value is either the name of a profile shipped with the SDK or the path of a profile file of
+your own, which is how you describe new hardware. [boards/README.md](boards/README.md) documents
+the profile format and the serial protocol a board's loader has to implement.
+
 ## Testing the SDK
 
-`make check-run` builds every project under `test/` with `cargo scry`, runs it on scryer, and
-compares the returned operands with the project's `expected.txt`. It needs `dist/bin` on your
-`PATH` and scryer installed, exactly as above. To add a test, add a directory with a cargo project
-and an `expected.txt`; `make check-run-<name>` runs a single one.
+`make check` runs everything below. It needs `dist/bin` on your `PATH` and scryer installed,
+exactly as above.
+
+- `make check-run` builds every project under `test/` with `cargo scry`, runs it on scryer, and
+  compares the returned operands with the project's `expected.txt`. To add a test, add a directory
+  with a cargo project and an `expected.txt`; `make check-run-<name>` runs a single one.
+- `make check-image` links the same projects for every board profile and builds the image that
+  would be downloaded, which checks the program against the board's memory and the image against
+  the ELF. No board is needed.
+- `make check-wrapper` runs the unit tests of `cargo-scry` and `scry-load`.
