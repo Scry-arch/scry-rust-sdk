@@ -1,3 +1,4 @@
 rust-toolchain.toml
 build/
 dist/
+wrapper/cargo-scry/target

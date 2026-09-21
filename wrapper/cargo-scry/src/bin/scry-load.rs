@@ -1,10 +1,12 @@
-//! `scry-load`: puts a Scry ELF executable onto a board.
+//! `scry-load`: puts a Scry program onto a board.
 //!
 //! `cargo scry run --board <board>` uses this as the cargo runner, so it is invoked as
-//! `scry-load --board-file <profile> <elf> [options]`, with the options being whatever the user put
-//! after `--` on the cargo command line.
+//! `scry-load --board-file <profile> <program> [options]`, with the options being whatever the
+//! user put after `--` on the cargo command line.
 //!
-//! The ELF is checked against the board's memory, flattened into one image, sent to the board's
+//! The program is an ELF executable, a textual `.scry` assembly file (assembled here), or — only
+//! under the explicit `--raw` flag — a pre-flattened binary; assembled and raw programs load at
+//! address 0 with entry 0. The image is checked against the board's memory, sent to the board's
 //! loader over the serial port, and then the program's output is shown until it ends, when the
 //! returned operands are printed the way scryer prints them.
 
@@ -14,17 +16,24 @@ use cargo_scry::loader;
 use cargo_scry::loader::Ack;
 use cargo_scry::loader::Event;
 use cargo_scry::loader::ReportParser;
+use scry_asm::Assemble as _;
 use std::io::Read as _;
 use std::io::Write as _;
+use std::path::Path;
 use std::path::PathBuf;
 use std::process::exit;
 use std::time::Duration;
 use std::time::Instant;
 
 const USAGE: &str = "\
-usage: scry-load --board-file <profile.toml> <program.elf> [options]
+usage: scry-load --board-file <profile.toml> <program> [options]
+
+The program is an ELF executable, or a .scry assembly text file
+(assembled here, loaded at address 0 with entry 0).
 
 options:
+  --raw            treat the program as a pre-flattened binary instead
+                   (loaded at address 0, entry 0)
   --check          only check that the program fits the board, send nothing
   --image <file>   write the flat image to <file> instead of sending it
   --port <name>    serial port of the board (default: autodetect)
@@ -32,7 +41,8 @@ options:
 
 struct Options {
     board_file: PathBuf,
-    elf: PathBuf,
+    program: PathBuf,
+    raw: bool,
     check_only: bool,
     image_file: Option<PathBuf>,
     port: Option<String>,
@@ -55,7 +65,8 @@ fn main() {
 
 fn parse_args() -> Result<Options, String> {
     let mut board_file = None;
-    let mut elf = None;
+    let mut program = None;
+    let mut raw = false;
     let mut check_only = false;
     let mut image_file = None;
     let mut port = None;
@@ -68,6 +79,7 @@ fn parse_args() -> Result<Options, String> {
             "--board-file" => board_file = Some(PathBuf::from(value("--board-file")?)),
             "--image" => image_file = Some(PathBuf::from(value("--image")?)),
             "--port" => port = Some(value("--port")?),
+            "--raw" => raw = true,
             "--check" => check_only = true,
             "--no-wait" => no_wait = true,
             "-h" | "--help" => {
@@ -75,14 +87,15 @@ fn parse_args() -> Result<Options, String> {
                 exit(0);
             }
             other if other.starts_with('-') => return Err(format!("unknown option {other}")),
-            _ if elf.is_none() => elf = Some(PathBuf::from(arg)),
+            _ if program.is_none() => program = Some(PathBuf::from(arg)),
             other => return Err(format!("unexpected argument {other}")),
         }
     }
 
     Ok(Options {
         board_file: board_file.ok_or("no board profile given (--board-file)")?,
-        elf: elf.ok_or("no ELF file given")?,
+        program: program.ok_or("no program file given")?,
+        raw,
         check_only,
         image_file,
         port,
@@ -92,12 +105,11 @@ fn parse_args() -> Result<Options, String> {
 
 fn run(options: &Options) -> Result<i32, String> {
     let board = Board::load(&options.board_file)?;
-    let elf = std::fs::read(&options.elf)
-        .map_err(|error| format!("cannot read {}: {error}", options.elf.display()))?;
+    let data = std::fs::read(&options.program)
+        .map_err(|error| format!("cannot read {}: {error}", options.program.display()))?;
 
-    let image = Image::from_elf(&elf)?;
+    let image = load_image(&options.program, data, options.raw)?;
     image.check_against(&board)?;
-    image.verify_against(&elf)?;
     eprintln!("{}: {}", board.name, image.summary());
 
     if let Some(image_file) = &options.image_file {
@@ -111,6 +123,30 @@ fn run(options: &Options) -> Result<i32, String> {
     }
 
     send(&board, &image, options)
+}
+
+/// Builds the image from the program file: a pre-flattened binary under
+/// `--raw`, textual assembly for a `.scry` file, and an ELF otherwise —
+/// never decided by the file's contents.
+fn load_image(path: &Path, data: Vec<u8>, raw: bool) -> Result<Image, String> {
+    if raw {
+        return Image::flat(data);
+    }
+    let is_scry = path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("scry"));
+    if is_scry {
+        let text = String::from_utf8(data)
+            .map_err(|_| format!("{} is not UTF-8 assembly text", path.display()))?;
+        let bytes = scry_asm::Raw::assemble(std::iter::once(text.as_str()))
+            .map_err(|error| format!("cannot assemble {}: {error}", path.display()))?;
+        return Image::flat(bytes);
+    }
+    let image = Image::from_elf(&data)
+        .map_err(|error| format!("{error} (a pre-flattened binary needs --raw)"))?;
+    image.verify_against(&data)?;
+    Ok(image)
 }
 
 fn send(board: &Board, image: &Image, options: &Options) -> Result<i32, String> {

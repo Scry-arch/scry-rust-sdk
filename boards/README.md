@@ -36,7 +36,7 @@ Two linker arguments matter for a board without an MMU:
   byte.
 - `-n` stops the linker from padding each segment out to a page boundary.
 
-## What `scry-load` does with an ELF
+## What `scry-load` does
 
 `cargo scry run --board <board>` runs `scry-load` with the freshly linked ELF. It
 
@@ -49,8 +49,14 @@ Two linker arguments matter for a board without an MMU:
 4. verifies that block against the ELF byte for byte,
 5. sends it, then shows the program's output and finally its returned operands in scryer's format.
 
-Options go after `--`: `--check` stops after step 2, `--image <file>` writes the block to a file
-instead of sending it, `--port <name>` picks the serial port, `--no-wait` exits after launch.
+Two other program forms are accepted, chosen explicitly rather than by sniffing the file's
+contents: a `.scry` file (by its extension) is assembled — the Scry assembler is built in — and
+under the `--raw` flag the file is taken as pre-flattened bytes. Either becomes a flat image at
+address 0 with entry 0 and goes through the same checks and download.
+
+Options go after `--`: `--raw` treats the program as a pre-flattened binary, `--check` stops
+after step 2, `--image <file>` writes the block to a file instead of sending it, `--port <name>`
+picks the serial port, `--no-wait` exits after launch.
 
 ## Loader protocol
 

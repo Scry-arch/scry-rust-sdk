@@ -83,6 +83,21 @@ impl Image {
         })
     }
 
+    /// A pre-flattened raw program, the form the Scry assembler emits: the
+    /// bytes run from address 0 and execution starts at 0.
+    pub fn flat(bytes: Vec<u8>) -> Result<Image, String> {
+        if bytes.is_empty() {
+            return Err("the program is empty".to_owned());
+        }
+        let memory_end = bytes.len() as u64;
+        Ok(Image {
+            load_address: 0,
+            entry: 0,
+            bytes,
+            memory_end,
+        })
+    }
+
     /// Checks that the image can run on `board`.
     pub fn check_against(&self, board: &Board) -> Result<(), String> {
         let program = board.memory.program;
@@ -247,6 +262,19 @@ mod tests {
         assert_eq!(image.load_address, 0x200);
         assert_eq!(image.bytes, [1, 2, 3, 4, 0, 0, 0, 0, 7, 7]);
         image.verify_against(&elf).unwrap();
+    }
+
+    #[test]
+    fn flat_images_load_at_zero_with_entry_zero() {
+        let image = Image::flat(vec![1, 2, 3, 4]).unwrap();
+        assert_eq!(image.load_address, 0);
+        assert_eq!(image.entry, 0);
+        assert_eq!(image.bytes, [1, 2, 3, 4]);
+        assert_eq!(image.memory_end, 4);
+        image.check_against(&board(0, 0x1000, None)).unwrap();
+
+        let error = Image::flat(Vec::new()).unwrap_err();
+        assert!(error.contains("empty"), "{error}");
     }
 
     #[test]
