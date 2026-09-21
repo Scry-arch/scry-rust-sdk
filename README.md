@@ -137,8 +137,9 @@ Create a project with `cargo new`, replace `src/main.rs` with a program shaped l
 and use `cargo scry` instead of `cargo`. Nothing else is needed.
 
 The SDK's `core` library is deliberately small. Integer arithmetic is available for types up to 32
-bits, `for` loops work over `a..b` ranges, and `panic!` accepts a string literal only. There is no
-`std`, no heap, no floating point and no formatting yet.
+bits, `for` loops work over `a..b` ranges, and `panic!` accepts a string literal only. For
+memory-mapped I/O, raw pointers have `read_volatile` and `write_volatile`, also available as
+functions in `core::ptr`. There is no `std`, no heap, no floating point and no formatting yet.
 
 ## Running on hardware
 

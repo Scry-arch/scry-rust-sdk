@@ -28,3 +28,13 @@ pub fn bswap<T>(x: T) -> T;
 pub unsafe fn write_bytes<T>(dst: *mut T, val: u8, count: usize);
 #[rustc_intrinsic]
 pub unsafe fn unreachable() -> !;
+/// A load the compiler must perform exactly as written: never removed, merged
+/// with another, or reordered. Use through `ptr::read_volatile`.
+#[rustc_intrinsic]
+#[rustc_nounwind]
+pub unsafe fn volatile_load<T>(src: *const T) -> T;
+/// A store the compiler must perform exactly as written. Use through
+/// `ptr::write_volatile`.
+#[rustc_intrinsic]
+#[rustc_nounwind]
+pub unsafe fn volatile_store<T>(dst: *mut T, val: T);

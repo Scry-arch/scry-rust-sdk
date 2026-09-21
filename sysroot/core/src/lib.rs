@@ -6,6 +6,9 @@
 //!   `panic!` accepts only a string literal.
 //! - `for` loops work over `a..b` ranges of the integer types only; `Iterator`
 //!   has no adapters and there is no `Step`, `RangeInclusive` or `RangeFrom`.
+//! - Raw pointers have only the volatile accessors (`read_volatile`,
+//!   `write_volatile`, as functions in `ptr` and as methods), which exist for
+//!   memory-mapped I/O. They are never inlined; see the note in `ptr`.
 //! - Not yet provided: floats, Ordering/Eq/Ord, derive(PartialOrd),
 //!   str comparison, UnsafeCell, fmt.
 #![feature(
@@ -22,6 +25,9 @@
     freeze_impls
 )]
 #![no_core]
+// Lets this crate, like real core, add inherent methods to primitive types
+// such as raw pointers.
+#![rustc_coherence_is_core]
 #![allow(dead_code, internal_features, ambiguous_wide_pointer_comparisons)]
 
 pub mod arch;
