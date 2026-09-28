@@ -8,7 +8,7 @@
 //!   has no adapters and there is no `Step`, `RangeInclusive` or `RangeFrom`.
 //! - Raw pointers have only the volatile accessors (`read_volatile`,
 //!   `write_volatile`, as functions in `ptr` and as methods), which exist for
-//!   memory-mapped I/O. They are never inlined; see the note in `ptr`.
+//!   memory-mapped I/O.
 //! - Not yet provided: floats, Ordering/Eq/Ord, derive(PartialOrd),
 //!   str comparison, UnsafeCell, fmt.
 #![feature(

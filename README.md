@@ -184,6 +184,11 @@ exactly as above.
 - `make check-run` builds every project under `test/` with `cargo scry`, runs it on scryer, and
   compares the returned operands with the project's `expected.txt`. To add a test, add a directory
   with a cargo project and an `expected.txt`; `make check-run-<name>` runs a single one.
+- `make check-release` runs, in addition, a release build of every test that holds a
+  `release-metrics.txt`. The returned operands must still match `expected.txt`, and each
+  `Name: value` line of `release-metrics.txt` must match scryer's execution metric of that name.
+  That catches optimisations that change which memory accesses a program makes, for example
+  merged volatile reads, which the returned operands cannot show.
 - `make check-image` links the same projects for every board profile and builds the image that
   would be downloaded, which checks the program against the board's memory and the image against
   the ELF. No board is needed.

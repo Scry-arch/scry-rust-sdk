@@ -211,6 +211,40 @@ check-run-%: test/%/expected.txt build-all
 	  || { echo "check-run-$*: FAILED, expected:"; cat $(BUILD)/test/$*.expected; echo "actual:"; cat $(BUILD)/test/$*.actual; exit 1; }
 	@echo "check-run-$*: OK"
 
+# --- Release tests -------------------------------------------------------------
+
+# A run test that also holds a release-metrics.txt is run a second time, built
+# with `cargo scry run --release`. Its returned operands must still match
+# expected.txt, and every "Name: value" line of release-metrics.txt must match
+# the line of that name in scryer's execution metrics. This catches
+# optimisations that change which memory accesses a program makes, which the
+# returned operands alone cannot show. Blank lines and lines starting with #
+# are ignored. Run one with `make check-release-<name>`.
+RELEASE_TESTS := $(patsubst test/%/release-metrics.txt,%,$(wildcard test/*/release-metrics.txt))
+
+.PHONY: check-release
+check-release: $(RELEASE_TESTS:%=check-release-%)
+
+check-release-%: test/%/release-metrics.txt test/%/expected.txt build-all
+	@mkdir -p $(BUILD)/test
+	@out="$(abspath $(BUILD))/test/$*.release"; \
+	 ( cd test/$* && cargo scry run --release --quiet ) > "$$out.out" 2>&1 \
+	   || { echo "check-release-$*: FAILED to build or run:"; cat "$$out.out"; exit 1; }; \
+	 sed -n '/Returned Operands/{n;s/[[:space:]]*$$//;p;}' "$$out.out" > "$$out.actual"; \
+	 sed 's/[[:space:]]*$$//' test/$*/expected.txt > "$$out.expected"; \
+	 git diff --no-index --quiet "$$out.expected" "$$out.actual" \
+	   || { echo "check-release-$*: FAILED, expected:"; cat "$$out.expected"; echo "actual:"; cat "$$out.actual"; exit 1; }; \
+	 awk -F': *' '{ sub(/[[:space:]]+$$/, "") } /^[[:space:]]*(#|$$)/ { next } { print $$1 ": " $$2 }' \
+	   test/$*/release-metrics.txt > "$$out.metrics.expected"; \
+	 awk -F': *' '{ sub(/[[:space:]]+$$/, "") } \
+	   NR == FNR { value[$$1] = $$2; next } \
+	   { print $$1 ": " (($$1 in value) ? value[$$1] : "(no such metric)") }' \
+	   "$$out.out" "$$out.metrics.expected" > "$$out.metrics.actual"; \
+	 git diff --no-index --quiet "$$out.metrics.expected" "$$out.metrics.actual" \
+	   || { echo "check-release-$*: FAILED, expected metrics:"; cat "$$out.metrics.expected"; \
+	        echo "actual:"; cat "$$out.metrics.actual"; exit 1; }; \
+	 echo "check-release-$*: OK"
+
 # --- Board image tests ----------------------------------------------------------
 
 # Links every run test for every board and lets scry-load build its image
@@ -242,7 +276,7 @@ check-wrapper: rust-toolchain.toml
 	  --target-dir $(BUILD)/cargo-scry
 
 .PHONY: check
-check: check-wrapper check-run check-image
+check: check-wrapper check-run check-release check-image
 
 .PHONY: build-all
 build-all: $(BACKEND) $(WILD) $(TARGET_SPEC) $(CORE_RLIB) $(BUILTINS_RLIB) $(CARGO_SCRY) $(BOARDS)

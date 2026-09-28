@@ -59,17 +59,6 @@ pub unsafe fn drop_glue<T: ?Sized>(_to_drop: &mut T) {
 // Memory-mapped I/O registers change on their own and react to being read or
 // written, so every access in the source must happen, once, in order. Ordinary
 // loads and stores may be removed or merged by the compiler; these may not.
-//
-// WORKAROUND: the two functions below are `#[inline(never)]` on purpose. The
-// backend lowers the volatile intrinsics to ordinary loads and stores, and
-// Cranelift's alias analysis then merges repeated loads of one address in
-// optimised builds (three `read_volatile`s of a register became one load). It
-// has no per-load opt-out. Alias analysis works within one function, so keeping
-// each access in its own never-inlined function guarantees it happens, at the
-// price of a call per access. Once the backend keeps volatile accesses intact
-// itself (for example by disabling `enable_alias_analysis`), these can go back
-// to `#[inline]`; the `volatile` run test does not detect a regression, so
-// check the simulator's `DataReads` count for a release build when changing it.
 
 /// Reads the value at `src` with a load that is never optimised away, without
 /// moving it.
@@ -78,7 +67,7 @@ pub unsafe fn drop_glue<T: ?Sized>(_to_drop: &mut T) {
 ///
 /// `src` must be valid for reads and properly aligned, as for an ordinary read.
 /// Like real core, this does not drop or otherwise touch the value at `src`.
-#[inline(never)]
+#[inline]
 pub unsafe fn read_volatile<T>(src: *const T) -> T {
     unsafe { crate::intrinsics::volatile_load(src) }
 }
@@ -90,7 +79,7 @@ pub unsafe fn read_volatile<T>(src: *const T) -> T {
 ///
 /// `dst` must be valid for writes and properly aligned, as for an ordinary
 /// write.
-#[inline(never)]
+#[inline]
 pub unsafe fn write_volatile<T>(dst: *mut T, src: T) {
     unsafe { crate::intrinsics::volatile_store(dst, src) }
 }

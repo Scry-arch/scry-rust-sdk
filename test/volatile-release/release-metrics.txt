@@ -1,0 +1,7 @@
+# Memory accesses of the release build, as counted by scryer. The program makes
+# no data accesses besides the volatile ones in `_start`:
+# three 4-byte reads and two 1-byte reads,
+DataReads: 5
+DataReadBytes: 14
+# and two 4-byte writes and two 1-byte writes.
+DataWriteBytes: 10
