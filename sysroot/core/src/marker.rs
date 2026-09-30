@@ -24,6 +24,15 @@ pub trait BikeshedGuaranteedNoDrop {}
 #[lang = "structural_peq"]
 pub trait StructuralPartialEq {}
 
+/// The type of an enum's discriminant, implemented by the compiler. The derived
+/// comparisons of enums read discriminants through
+/// `intrinsics::discriminant_value`.
+#[lang = "discriminant_kind"]
+pub trait DiscriminantKind {
+    #[lang = "discriminant_type"]
+    type Discriminant: Copy;
+}
+
 #[lang = "copy"]
 pub trait Copy {}
 
@@ -63,6 +72,12 @@ unsafe impl<T: PointeeSized> Freeze for &mut T {}
 
 #[lang = "unpin"]
 pub auto trait Unpin {}
+
+/// Consulted by optimised builds to decide whether a `&mut` argument may be
+/// marked as not aliasing anything else. An auto trait, so every type without
+/// an opt-out has it.
+#[lang = "unsafe_unpin"]
+pub unsafe auto trait UnsafeUnpin {}
 
 #[lang = "phantom_data"]
 pub struct PhantomData<T: PointeeSized>;

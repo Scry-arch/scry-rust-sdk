@@ -14,6 +14,60 @@ pub struct Range<Idx> {
     pub end: Idx,
 }
 
+/// An unbounded range, `..`, as in `slice[..]`.
+#[lang = "RangeFull"]
+pub struct RangeFull;
+
+impl crate::marker::Copy for RangeFull {}
+
+impl crate::clone::Clone for RangeFull {
+    #[inline]
+    fn clone(&self) -> Self {
+        RangeFull
+    }
+}
+
+/// A range with only a lower bound, `start..`, as in `slice[start..]`.
+#[lang = "RangeFrom"]
+pub struct RangeFrom<Idx> {
+    pub start: Idx,
+}
+
+/// A range with only an exclusive upper bound, `..end`, as in `slice[..end]`.
+#[lang = "RangeTo"]
+pub struct RangeTo<Idx> {
+    pub end: Idx,
+}
+
+/// A range with both bounds inclusive, `start..=end`. The compiler builds one
+/// through `RangeInclusive::new` for every `a..=b` expression.
+#[lang = "RangeInclusive"]
+pub struct RangeInclusive<Idx> {
+    pub(crate) start: Idx,
+    pub(crate) end: Idx,
+    // Set once iteration has produced `end`, so that a range ending at the
+    // type's maximum value terminates.
+    pub(crate) exhausted: bool,
+}
+
+impl<Idx> RangeInclusive<Idx> {
+    #[lang = "range_inclusive_new"]
+    #[inline]
+    pub const fn new(start: Idx, end: Idx) -> Self {
+        Self { start, end, exhausted: false }
+    }
+
+    #[inline]
+    pub const fn start(&self) -> &Idx {
+        &self.start
+    }
+
+    #[inline]
+    pub const fn end(&self) -> &Idx {
+        &self.end
+    }
+}
+
 #[lang = "add"]
 pub trait Add<Rhs = Self> {
     type Output;
@@ -170,14 +224,6 @@ macro_rules! int_ops_impls {
             type Output = $t;
             fn bitxor(self, rhs: $t) -> $t { self ^ rhs }
         }
-        impl Shl for $t {
-            type Output = $t;
-            fn shl(self, rhs: $t) -> $t { self << rhs }
-        }
-        impl Shr for $t {
-            type Output = $t;
-            fn shr(self, rhs: $t) -> $t { self >> rhs }
-        }
         impl Not for $t {
             type Output = $t;
             fn not(self) -> $t { !self }
@@ -206,16 +252,39 @@ macro_rules! int_ops_impls {
         impl BitXorAssign for $t {
             fn bitxor_assign(&mut self, rhs: $t) { *self = *self ^ rhs; }
         }
-        impl ShlAssign for $t {
-            fn shl_assign(&mut self, rhs: $t) { *self = *self << rhs; }
-        }
-        impl ShrAssign for $t {
-            fn shr_assign(&mut self, rhs: $t) { *self = *self >> rhs; }
-        }
     )*};
 }
 
 int_ops_impls! { u8 u16 u32 usize i8 i16 i32 isize }
+
+// Shifts take any integer type as the shift amount, as in real core, so that
+// e.g. `byte << n` with `n: u32` compiles.
+macro_rules! shift_impls {
+    ($t:ty; $($r:ty)*) => {$(
+        impl Shl<$r> for $t {
+            type Output = $t;
+            fn shl(self, rhs: $r) -> $t { self << rhs }
+        }
+        impl Shr<$r> for $t {
+            type Output = $t;
+            fn shr(self, rhs: $r) -> $t { self >> rhs }
+        }
+        impl ShlAssign<$r> for $t {
+            fn shl_assign(&mut self, rhs: $r) { *self = *self << rhs; }
+        }
+        impl ShrAssign<$r> for $t {
+            fn shr_assign(&mut self, rhs: $r) { *self = *self >> rhs; }
+        }
+    )*};
+}
+
+macro_rules! all_shift_impls {
+    ($($t:ty)*) => {$(
+        shift_impls! { $t; u8 u16 u32 usize i8 i16 i32 isize }
+    )*};
+}
+
+all_shift_impls! { u8 u16 u32 usize i8 i16 i32 isize }
 
 macro_rules! neg_impls {
     ($($t:ty)*) => {$(
@@ -322,16 +391,26 @@ impl<T> IndexMut<usize> for [T] {
     }
 }
 
-impl<T, const N: usize> Index<usize> for [T; N] {
-    type Output = T;
-    fn index(&self, index: usize) -> &T {
-        &self[index]
+// Arrays index like the slices they coerce to, with a single index or any of
+// the ranges `slice` implements.
+impl<T, I, const N: usize> Index<I> for [T; N]
+where
+    [T]: Index<I>,
+{
+    type Output = <[T] as Index<I>>::Output;
+    #[inline]
+    fn index(&self, index: I) -> &Self::Output {
+        Index::index(self as &[T], index)
     }
 }
 
-impl<T, const N: usize> IndexMut<usize> for [T; N] {
-    fn index_mut(&mut self, index: usize) -> &mut T {
-        &mut self[index]
+impl<T, I, const N: usize> IndexMut<I> for [T; N]
+where
+    [T]: IndexMut<I>,
+{
+    #[inline]
+    fn index_mut(&mut self, index: I) -> &mut Self::Output {
+        IndexMut::index_mut(self as &mut [T], index)
     }
 }
 

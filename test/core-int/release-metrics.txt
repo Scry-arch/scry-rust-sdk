@@ -1,0 +1,2 @@
+# No metrics to compare: this file only opts the test into a release build, in
+# which the returned operands must match expected.txt as well.

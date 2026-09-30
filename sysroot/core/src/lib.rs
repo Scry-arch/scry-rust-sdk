@@ -4,13 +4,23 @@
 //! - Operator impls exist ONLY for <=32-bit types; `u64 + u64` etc. fail typeck (E0369).
 //! - Panics trap immediately; no `#[panic_handler]`, no unwinding, no formatting.
 //!   `panic!` accepts only a string literal.
-//! - `for` loops work over `a..b` ranges of the integer types only; `Iterator`
-//!   has no adapters and there is no `Step`, `RangeInclusive` or `RangeFrom`.
-//! - Raw pointers have only the volatile accessors (`read_volatile`,
-//!   `write_volatile`, as functions in `ptr` and as methods), which exist for
-//!   memory-mapped I/O.
-//! - Not yet provided: floats, Ordering/Eq/Ord, derive(PartialOrd),
-//!   str comparison, UnsafeCell, fmt.
+//! - Integers have wrapping arithmetic, rotations, byte order conversion, bit
+//!   counting, `abs`, `MIN`/`MAX`/`BITS`, and `min`/`max`/`clamp` through
+//!   `Ord`. No checked, overflowing or saturating arithmetic, no `pow`.
+//! - `for` loops work over `a..b` and `a..=b` ranges of the integer types and
+//!   over slices and arrays by reference. `Iterator` has only the adapters
+//!   `rev` and `enumerate`; there is no `Step`, and arrays cannot be iterated
+//!   by value.
+//! - Slices and arrays have `len`, `get`, `iter`, `swap`, `fill`,
+//!   `copy_from_slice`, range indexing and element-wise equality, but no
+//!   ordering, searching or sorting.
+//! - Raw pointers have `add`, and `ptr` has `read`, `write`, `copy`,
+//!   `copy_nonoverlapping` and `swap`, plus the volatile accessors
+//!   (`read_volatile`, `write_volatile`, also as methods) for memory-mapped I/O.
+//! - `str` has only `len`, `as_bytes` and equality.
+//! - `hint::black_box` goes through a volatile store and load, because the
+//!   backend ignores the intrinsic.
+//! - Not yet provided: floats, 64-bit integers, UnsafeCell, fmt.
 #![feature(
     no_core,
     lang_items,
@@ -22,7 +32,9 @@
     transparent_unions,
     pattern_types,
     auto_traits,
-    freeze_impls
+    freeze_impls,
+    allow_internal_unstable,
+    const_trait_impl
 )]
 #![no_core]
 // Lets this crate, like real core, add inherent methods to primitive types
@@ -34,16 +46,20 @@ pub mod arch;
 pub mod clone;
 pub mod cmp;
 pub mod ffi;
+pub mod hint;
 pub mod intrinsics;
 pub mod iter;
 pub mod marker;
 pub mod mem;
+pub mod num;
 pub mod ops;
 pub mod option;
 pub mod panic;
 pub mod panicking;
 pub mod prelude;
 pub mod ptr;
+pub mod slice;
+pub mod str;
 
 mod macros;
 
